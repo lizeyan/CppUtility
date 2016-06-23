@@ -49,5 +49,14 @@ void Utility::Timer<Clock, Duration>::reset ()
 template <class Clock, class Duration>
 Duration Utility::Timer<Clock, Duration>::report ()
 {
-    return _duration;
+    Duration duration;
+    if (_on)
+    {
+        stop ();
+        duration = _duration;
+        start ();
+    }
+    else
+        duration = _duration;
+    return duration;
 }
