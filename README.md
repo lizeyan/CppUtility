@@ -1,4 +1,12 @@
-# Component
+# Utility
 ---
+Some useful components, which are all made with standard c++ and, therefore, can run everywhere easily.
 
-一些常用的模块，比如解析命令，程序计时器等等
+Author: zy-li14@hotmail.com
+
+---
+## Timer
+Control a timer and report the time cost.
+
+## Command
+Parse a line of command.
