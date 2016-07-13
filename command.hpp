@@ -1,6 +1,7 @@
 #ifndef __COMMAND___
 #define __COMMAND___
 #include <string>
+#include <typeinfo>
 #include <vector>
 #include <utility>
 #include <functional>
@@ -10,6 +11,7 @@
 #include <sstream>
 #include <memory>
 #include <iterator>
+#include <iomanip>
 namespace Utility
 {
     class Command
@@ -37,6 +39,7 @@ namespace Utility
                 char abbr;
                 std::string description;
                 virtual void set (const std::string& value) = 0;
+                virtual std::string getType () const = 0;
                 bool optional;
                 ArgumentDetailBase (const std::string& k, char a, const std::string& d, bool o): key(k), abbr (a), description (d), optional (o) {}
             };
@@ -49,6 +52,10 @@ namespace Utility
                 {
                     this->value = read<T> (value);
                 }
+                std::string getType () const
+                {
+                    return typeid (value).name ();
+                }
                 ArgumentDetail (const std::string& k, char a, const std::string& d, bool o, const T& v, const std::function<bool(const T&)>& va): ArgumentDetailBase (k, a, d, o), value (v), validator (va) {}
             };
             typedef std::unordered_map<std::string, std::unique_ptr<ArgumentDetailBase> > Key2Detail;
@@ -57,6 +64,7 @@ namespace Utility
             Abbr2Detail _abbrMap;
             std::vector<std::string> _errors;
             std::vector<std::string> _nakeWords;
+            std::vector<ArgumentDetailBase*> _essentials, _optionals;
 
 
             void parseWords (const std::vector<std::string>& words);
@@ -164,10 +172,52 @@ const std::string& Utility::Command::what () const
 const std::string& Utility::Command::usage () const
 {
     static const int factor = 100;
-    std::string ret;
-    ret.reserve (factor * _map.size ());
-    ret.append ("Usage: ");
-    //TODO
+    std::string ret ("");
+    // ret.reserve (factor * _map.size ());
+    ret.clear();
+    ret.append ("Usage:");
+    for (const auto& dptr: _essentials)
+    {
+        ret.append (" --");
+        ret.append (dptr->key);
+        ret.append ("=");
+        ret.append (dptr->getType ());
+    }
+    ret.append ("\nOptions:\n");
+    for (const auto& pair: _map)
+    {
+        ArgumentDetailBase* dptr = pair.second.get ();
+        ret.append ("\t--");
+        ret.append (dptr->key);
+        if (isWhite (dptr->abbr))
+        {
+            ret.append ("     ");
+        }
+        else
+        {
+            ret.append (" , -");
+            ret.push_back (dptr->abbr);
+        }
+        ret.append (" , ");
+        ret.append (dptr->getType ());
+        ret.append (" , ");
+        ret.append (dptr->description);
+        ret.append ("\n");
+    }
+    // std::stringstream msg;
+    // msg << "usage:";
+    // for (const auto& dptr: _essentials)
+    // {
+    //     msg << " --" << dptr->key << "=";// << dptr->getType ();
+    // }
+    // // msg << "\n";
+    // msg << "options:";// << std::endl;
+    // for (const auto& pair: _map)
+    // {
+    //     msg << "\t--" << pair.second->key << " , -" << std::setw (1) << pair.second->abbr << " , " << pair.second->description;// << std::endl;
+    // }
+    // return std::move (msg.str ());
+    return std::move (ret);
 }
 bool Utility::Command::exist (const std::string& key) const
 {
@@ -209,13 +259,20 @@ void Utility::Command::add (const std::string& key, char abbr, const std::string
 {
     if (_map.find (key) != _map.end ())
         throw std::invalid_argument ("replicated key is provided:" + key);
-    _map[key] = std::move(std::unique_ptr<ArgumentDetailBase> (new ArgumentDetail<T>(key, abbr, std::move(description), optional, std::move(defaultValue), std::move (validator))));
+    ArgumentDetailBase* detail = new ArgumentDetail<T>(key, abbr, std::move(description), optional, std::move(defaultValue), std::move (validator));
+    _map[key] = std::move(std::unique_ptr<ArgumentDetailBase> (detail));
     if (!isWhite (abbr))
     {
         if (_abbrMap.find (abbr) != _abbrMap.end ())
             throw std::invalid_argument ("replicated abbr is provided:" + abbr);
-        _abbrMap[abbr] = _map.at (key).get ();
+        _abbrMap[abbr] = detail;
     }
+    if (optional)
+    {
+        _optionals.push_back (detail);
+    }
+    else
+        _essentials.push_back (detail);
 }
 template <typename T>
 inline void Utility::Command::add (const std::string& key, const std::string& description , bool optional, const T& defaultValue, const std::function<bool(const T&)>& validator)
