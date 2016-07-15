@@ -22,15 +22,16 @@ namespace Utility
 			void parse (int argc, char** argv);
 			bool valid () const;// check whether the command is valid
 			const std::string& what () const;//return the error message when the command is invalid
+			const std::vector<std::string>& errors () const {return _errors;}
 			const std::string& usage () const;
 			template <typename T>
 			const T& get (const std::string& key) const;//get the required argument. Throw a invalid_argument exception when there is no such key.
 			template <typename T>
 			void add (const std::string& key, char abbr, const std::string& description = "", bool optional = false, const T& defaultValue = T (), std::function<bool(const T&)> validator = [] (const T&) {return true;});
 			template <typename T>
-			void add (const std::string& key, const std::string& description = "", bool optional = false, const T& defaultValue = T (), const std::function<bool(const T&)>& validator = [] (const T&) {return true;});//add without abbr
-			void add (const std::string& key, const std::string& description = "", bool optional = false, const std::function<bool(const T&)>& validator = [] (const T&) {return true;});//add without abbr
-			void add (const std::string& key, char abbr, const std::string& description = "", bool optional = false, const std::function<bool(const T&)>& validator = [] (const T&) {return true;});
+			void add (const std::string& key, char abbr, const std::string& description = "", const std::function<bool(const T&)>& validator = [] (const T&) {return true;});//add without abbr
+			template <typename T>
+			void add (const std::string& key, char abbr, const std::string& description = "", const T& defaultValue = T (), const std::function<bool(const T&)>& validator = [] (const T&) {return true;});
 			bool exist (const std::string& key) const;//check if a key is provided
 			const std::string& head () const;//return the first argument
 			const std::vector<std::string>& nake () const;//return all arguments that can't be bound to a key
@@ -53,6 +54,8 @@ namespace Utility
 				void set (const std::string& value)
 				{
 					this->value = read<T> (value);
+					if (!validator (this->value))
+						throw std::invalid_argument ("validator for " + value + " failed.");
 				}
 				std::string getType () const
 				{
@@ -70,6 +73,7 @@ namespace Utility
 
 
 			void parseWords (const std::vector<std::string>& words);
+			void initStatus ();
 			static bool isWhite (char x)
 			{
 				return x == ' ' || x == '\t' || x == '\n' || x == '\r';
@@ -130,6 +134,11 @@ void Utility::Command::parse (int argc, char** argv)
 }
 void Utility::Command::parseWords (const std::vector<std::string>& words)
 {
+	std::unordered_map<std::string, bool> essMap;
+	for (const auto& ptr: _essentials)
+	{
+		essMap[ptr->key] = false;
+	}
 	ArgumentDetailBase* curDetail = nullptr;
 	for (const auto& word: words)
 	{
@@ -154,8 +163,23 @@ void Utility::Command::parseWords (const std::vector<std::string>& words)
 		}
 		else
 		{
-			curDetail->set (word);
+			try
+			{
+				curDetail->set (word);
+				essMap.at (curDetail->key) = true;
+			}
+			catch (std::exception& e)
+			{
+				_errors.push_back ("Type conversion error. Source string: " + word + " .Target type: " + curDetail->getType ());
+			}
 			curDetail = nullptr;
+		}
+		for (const auto& pair: essMap)
+		{
+			if (pair.second == false)
+			{
+				_errors.push_back ("This essential argument is not set: " + pair.first + " .");
+			}
 		}
 	}
 }
@@ -178,7 +202,6 @@ const std::string& Utility::Command::what () const
 }
 const std::string& Utility::Command::usage () const
 {
-	static const int factor = 100;
 	std::string ret ("");
 	// ret.reserve (factor * _map.size ());
 	ret.clear();
@@ -281,22 +304,17 @@ void Utility::Command::add (const std::string& key, char abbr, const std::string
 	else
 		_essentials.push_back (detail);
 }
+
 template <typename T>
-inline void Utility::Command::add (const std::string& key, const std::string& description , bool optional, const T& defaultValue, const std::function<bool(const T&)>& validator)
+inline void Utility::Command::add (const std::string& key, char abbr, const std::string& description,  const std::function<bool(const T&)>& validator)
 {
-	add (key, 0, description, optional, defaultValue, validator);
+	add (key, abbr, description, false, std::move(T ()), validator);
 }
 
 template <typename T>
-inline void Utility::Command::add (const std::string& key, const std::string& description , bool optional, const std::function<bool(const T&)>& validator)
+inline void Utility::Command::add (const std::string& key, char abbr, const std::string& description, const T& defaultValue, const std::function<bool(const T&)>& validator)
 {
-	add (key, 0, description, optional, std::move(T ()), validator);
-}
-
-template <typename T>
-inline void Utility::Command::add (const std::string& key, char abbr, const std::string& description , bool optional, const std::function<bool(const T&)>& validator)
-{
-	add (key, abbr, description, optional, std::move(T ()), validator);
+	add (key, abbr, description, true, defaultValue, validator);
 }
 
 namespace Utility
@@ -310,15 +328,8 @@ namespace Utility
 	const T& Command::read (const std::string& value)
 	{
 		T t;
-		try
-		{
-			std::stringstream in (value);
-			in >> t;
-			return std::move(t);
-		}
-		catch (std::exception& e)
-		{
-			_errors.push_back ("Type conversion error. Source string: " + value + " .Target type: " + std::string(typeid(t).name ()));
-		}
+		std::stringstream in (value);
+		in >> t;
+		return std::move(t);
 	}
 }
