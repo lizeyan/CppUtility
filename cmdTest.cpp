@@ -14,4 +14,5 @@ int main (int argc, char** argv)
         return 0;
     }
     std::cout << command.get<std::string> ("protocal") << "://" << command.get<std::string> ("domain") << ":" << command.get<int> ("port") << std::endl;
+    std::cout << command.
 }

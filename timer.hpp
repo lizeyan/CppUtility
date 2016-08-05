@@ -5,13 +5,13 @@ namespace Utility
     class Timer
     {
     public:
-        Timer ();// 默认构造函数
-        void start (); //开始计时
-        void reset (); //清零计时
-        void stop (); //停止计时，但不清零
-        Duration report (); //报告经过的时间
+        Timer ();// 
+        void start (); //
+        void reset (); //
+        void stop (); //
+        Duration report (); //
     private:
-        Duration _duration; //累计的时间
+        Duration _duration; //
         std::chrono::time_point<Clock, Duration> _timePoint;
         bool _on;
     };
